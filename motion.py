@@ -6,11 +6,13 @@ import cv
 ########################################################################################
 WIDTH = 320 #Ancho de video a usar
 HEIGHT = 240 #Alto de video a usar
+AREA = WIDTH*HEIGHT #Numero de pixeles/Area total de los frames
+MIN_PERCENT = 0.1 #Porcentaje minimo de pixeles que debe tener un objeto en movimiento
 GAUSSIAN_BLUR_FACTOR_1 = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
 GAUSSIAN_BLUR_FACTOR_2 = 19 #Tamano de la matriz usada para eliminar ruido la segunda vez
 BINARY_THRESHOLD_1 = 2 #Umbral de binarizacion inicial
 BINARY_THRESHOLD_2 = 240 #Umbral de binarizacion final
-DILATION_FACTOR = 3 #Tamano de la matriz usada para dilatar las manchas de movimiento
+DILATION_FACTOR = 1 #Tamano de la matriz usada para dilatar las manchas de movimiento
 SHOW_MOVEMENT_CONTOUR = True #Ver o no contornos de las manchas de movimiento
 SHOW_MOVEMENT_AREA = False #Ver o no las manchas de movimiento
 
@@ -98,7 +100,7 @@ while True:
     #mostrar o las manchas de movimiento
     if SHOW_MOVEMENT_AREA: cv.FillPoly( camera_image, [ list(polygon_points), ], cv.CV_RGB(255,255,255), 0, 0 )
     #mostrar o no los contornos de las manchas de movimiento
-    if SHOW_MOVEMENT_CONTOUR: cv.PolyLine( camera_image, [ polygon_points, ], 0, cv.CV_RGB(255,255,255), 1, 0, 0 )
+    if SHOW_MOVEMENT_CONTOUR and w*h > AREA*MIN_PERCENT: cv.PolyLine( camera_image, [ polygon_points, ], 0, cv.CV_RGB(255,255,255), 1, 0, 0 )
     average_box_area += w*h #acumulacion de totales de areas
     bbox_list.append((pt1, pt2)) #lista con todos los bounding box
     contour = contour.h_next() #lectura del siguiente contorno, si hay
@@ -108,7 +110,7 @@ while True:
     for i in range(len(bbox_list)): #recorrido de los bounding box
       pt1, pt2 = bbox_list[i] #separacion en dos puntos del bounding box
       w, h = abs(pt1[0] - pt2[0]), abs(pt1[1] - pt2[1]) #obtencion del ancho y largo
-      if w*h >= average_box_area: #comparacion del area del bounding box con el promedio
+      if w*h >= average_box_area and w*h > AREA*MIN_PERCENT: #comparacion del area del bounding box con el promedio
         new_bbox_list.append((pt1, pt2)) #si es mayor o igual, se queda en la nueva lista
   bbox_list = get_collided_bboxes(new_bbox_list) #combinacion de varios bounding box en uno si estan en contacto
   for pt1, pt2 in bbox_list: #recorrido de los bounding box finales
@@ -121,6 +123,5 @@ while True:
 #    cv.Circle(camera_image, center_point, 10, cv.CV_RGB(255, 100, 0), 1)
   cv.ShowImage('e2', camera_image) #mostrar los resultados en el feed de video
 
-  if cv2.waitKey(5) == 27: #si se presiona la tecla esc
+  if cv.WaitKey(5) == 27: #si se presiona la tecla esc
     break #salir del while infinito para terminar
-cv2.destroyAllWindows() #destruir todas las ventanas abiertas de OpenCV

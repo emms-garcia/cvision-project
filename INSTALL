@@ -1,0 +1,55 @@
+INSTALL
+=======
+
+Para su correcto funcionamiento el programa necesita lo siguiente:
+ o Python 2.7
+ o OpenCV
+
+A continuación se describirá como instalar cada uno.
+
+Python 2.7 - Linux
+==================
+
+Python regularmente está pre-instalado en sistemas operativos Linux
+(confirmado en Ubuntu y Fedora), pero en caso de no ser así, el 
+source puede ser descargado desde:
+
+http://www.python.org/getit/
+
+Después, seguir los pasos proporcionados en el archivo README 
+incluido en el source.
+
+Python 2.7 - Windows
+====================
+
+Para instalar Python en Windows, es posible descargar el instalador
+desde el enlace:
+
+http://www.python.org/getit/
+
+Se debe descargar la versión 2.7.4 (más actual), ejecutar el instalador
+y seguir los pasos indicados por el mismo.
+
+OpenCV - Windows
+================
+
+Descargar el instalador desde el siguiente enlace:
+
+http://opencv.willowgarage.com/wiki/InstallGuide
+
+Ejecutar el instalador y seguir las instrucciones.
+
+OpenCV - Python
+===============
+
+En Ubuntu, ejecutar el comando:
+
+sudo apt-get install python-opencv
+
+Ingresar la contraseña cuando se pida.
+
+En Fedora, ejecutar el comanod:
+
+sudo yum install python-opencv
+
+Ingresar igualmente la contraseña cuando se pida.

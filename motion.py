@@ -29,7 +29,7 @@ HEIGHT = 440 #Alto de video a usar
 #CONTRAST = 200
 DIAGONAL = distance((0, 0), (WIDTH, HEIGHT)) #Distancia Maxima del video
 GAUSSIAN_BLUR_FACTOR = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
-NFEATURES = 400 #Numero maximo de caracterististicas a buscar
+NFEATURES = 100 #Numero maximo de caracterististicas a buscar
 
 ########################################################################################
 #Inicializacion de lectura de frames. Si se especifico un archivo de video como argumento
@@ -81,7 +81,7 @@ while True:
   cv.Smooth( thumbnail, thumbnail, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR, GAUSSIAN_BLUR_FACTOR )
   #se voltean las imagenes para corregir un error de opencv
   cv.ConvertImage(thumbnail, frame1_1C, cv.CV_CVTIMG_FLIP)
-  cv.ConvertImage(thumbnail, output, cv.CV_CVTIMG_FLIP)
+  #cv.ConvertImage(thumbnail, output, cv.CV_CVTIMG_FLIP)
   frame = cv.QueryFrame( c ) #segundo frame obtenido para el calculo del flujo optico
   if frame == None: break 
   cv.Resize(frame, thumbnail) 
@@ -96,30 +96,29 @@ while True:
                             (3, 3), 5,  (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, 20, 0.03), 0)
 
   #recorrido de las caracteristicas
-  for i in range(NFEATURES):
-    #todo dentro de un try catch por si se obtuvieron menos caracteristicas de las esperadas
-    try:
-      #separamos los puntos iniciales y puntos finales en variables p y q
-      p = frame1_features[i]
-      q = frame2_features[i]
-      p = int(p[0]), int(p[1])
-      angle = math.atan2(p[1] - q [1], p[0] - q[0]) #calculamos el angulo entre ellos
-      hypotenuse = math.sqrt(math.pow(p[1] - q[1], 2) + math.pow(p[0] - q[0], 2))
-      q = (int(p[0] - 3*hypotenuse * math.cos(angle)), int(p[1] - 3*hypotenuse * math.sin(angle)))
-      #eliminacion de ruido (movimientos bruscos de un lado de la imagen al otro)
-      if distance(p, q) > DIAGONAL * 0.2:
-        continue
-      #mas eliminacion de ruido (pequenos movimientos casi nulos)
-      elif distance(p, q) < 10:
-        continue
-      #dibujo de las flechas de flujo optico
-      cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
-      p = (int(q[0] + 9 * math.cos(angle + math.pi / 4)), int(q[1] + 9 * math.sin(angle + math.pi/4)))
-      cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
-      p = (int(q[0] + 9 * math.cos(angle - math.pi / 4)), int(q[1] + 9 * math.sin(angle - math.pi/4)))
-      cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
-    except:
-      break
+  for i in range(len(frame2_features)):
+    #separamos los puntos iniciales y puntos finales en variables p y q
+    p = frame1_features[i]
+    q = frame2_features[i]
+    p = int(p[0]), int(p[1])
+    angle = math.atan2(p[1] - q [1], p[0] - q[0]) #calculamos el angulo entre ellos
+    hypotenuse = math.sqrt(math.pow(p[1] - q[1], 2) + math.pow(p[0] - q[0], 2))
+    q = (int(p[0] - 3*hypotenuse * math.cos(angle)), int(p[1] - 3*hypotenuse * math.sin(angle)))
+    #eliminacion de ruido (movimientos bruscos de un lado de la imagen al otro)
+    if distance(p, q) > DIAGONAL * 0.2:
+      continue
+    #mas eliminacion de ruido (pequenos movimientos casi nulos)
+    elif distance(p, q) < 10:
+      continue
+    p = (p[0], HEIGHT - p[1])
+    q = (q[0], HEIGHT - q[1])
+
+    #dibujo de las flechas de flujo optico
+    cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
+    p = (int(q[0] + 9 * math.cos(angle + math.pi / 4)), int(q[1] + 9 * math.sin(angle + math.pi/4)))
+    cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
+    p = (int(q[0] + 9 * math.cos(angle - math.pi / 4)), int(q[1] + 9 * math.sin(angle - math.pi/4)))
+    cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
   
   cv.ShowImage('Deteccion de Movimiento', output) #mostrar los resultados en el feed de video
   if cv.WaitKey(5) == 27: #si se presiona la tecla esc

@@ -30,20 +30,26 @@ HEIGHT = 440 #Alto de video a usar
 DIAGONAL = distance((0, 0), (WIDTH, HEIGHT)) #Distancia Maxima del video
 GAUSSIAN_BLUR_FACTOR = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
 NFEATURES = 100 #Numero maximo de caracterististicas a buscar
-
+NFRAMES = None #Numero de frames a usar, si se utiliza un archivo
+VIDEOFILE = False
+PLAY = False
+TEXT_FONT = cv.InitFont(cv.CV_FONT_HERSHEY_COMPLEX, .5, .5, 0.0, 1, cv.CV_AA )
 ########################################################################################
 #Inicializacion de lectura de frames. Si se especifico un archivo de video como argumento
 #desde la linea de comandos, se utiliza dicho video, si no se utiliza la webcam.
 ########################################################################################
 c = cv.CreateCameraCapture(0) #Usar camara 0 (camara web)
 if ".avi" in sys.argv[1]:
+  VIDEOFILE = True
   c = cv.CaptureFromFile( sys.argv[1] ) #Usar camara 0 (camara web)
+  NFRAMES = cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_COUNT  )
 
 ########################################################################################
 #Propiedades de la captura de imagenes desde la webcam.
 ########################################################################################
 cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_WIDTH, WIDTH ) #Ajustar ancho de video
 cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_HEIGHT, HEIGHT ) #Ajustar altura de video
+
 #cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FPS, FPS )
 #cv.SetCaptureProperty( c, cv.CV_CAP_PROP_BRIGHTNESS, BRIGHTNESS ) 
 #cv.SetCaptureProperty( c, cv.CV_CAP_PROP_CONTRAST, CONTRAST ) #
@@ -67,12 +73,14 @@ frame2_1C = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 )
 #contenedor de parametros usados en el algoritmo Lucas Kanade
 pyramid1 = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 ) 
 pyramid2 = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 ) 
-
+cv.SetCaptureProperty(c, cv.CV_CAP_PROP_POS_FRAMES, 0.0 )
+current_frame = 0
 ########################################################################################
 #Loop infinito para ejecutar las rutinas de deteccion de movimiento hasta
 #que se presione la tecla esc
 ########################################################################################
 while True:
+  if VIDEOFILE: cv.SetCaptureProperty(c, cv.CV_CAP_PROP_POS_FRAMES, current_frame )
   frame = cv.QueryFrame( c ) #primer frame obtenido para el calculo del flujo optico
   if frame == None: break #si no se obtuvo ningun frame, se termino el archivo de video
   cv.Resize(frame, thumbnail) #si se obtuvo un frame, se cambia el tamano al deseado
@@ -95,7 +103,8 @@ while True:
   frame2_features, status, track_error = cv.CalcOpticalFlowPyrLK(frame1_1C, frame2_1C, pyramid1, pyramid2, frame1_features, 
                             (3, 3), 5,  (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, 20, 0.03), 0)
 
-  #recorrido de las caracteristicas
+  #recorrido de las caracteristicas y dibujo de las flechas
+  #utilizando el algoritmo de http://ai.stanford.edu/~dstavens/cs223b/optical_flow_demo.cpp
   for i in range(len(frame2_features)):
     #separamos los puntos iniciales y puntos finales en variables p y q
     p = frame1_features[i]
@@ -119,8 +128,42 @@ while True:
     cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
     p = (int(q[0] + 9 * math.cos(angle - math.pi / 4)), int(q[1] + 9 * math.sin(angle - math.pi/4)))
     cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
-  
-  cv.ShowImage('Deteccion de Movimiento', output) #mostrar los resultados en el feed de video
-  if cv.WaitKey(5) == 27: #si se presiona la tecla esc
-    break #salir del while infinito para terminar
+  text = ""
+  key = cv.WaitKey(7) % 0x100
+  if key == 27 or key == 10:
+    break
+  if VIDEOFILE:
+    if chr(key) == 'n' or chr(key) == 'N':
+      current_frame += 1.0
+    elif chr(key) == 'b' or chr(key) == 'B':
+      current_frame -= 1.0
+    elif chr(key) == 'p' or chr(key) == 'P':
+      PLAY = not PLAY
+    
+    if (chr(key) == 's' or chr(key) == 'S') and not PLAY:
+      cv.SaveImage("output_frame_%s.jpg"%current_frame, output)
+      cv.PutText( output, "Frame guardado", (5, 30), TEXT_FONT, cv.CV_RGB(255, 255, 255))
+
+    if PLAY:
+      current_frame += 1
+      text = "Estado Actual: (Play)"
+    else:
+      text = "Estado Actual: (Pausa)"
+
+    if current_frame < 0.0: 
+      print "Se llego al principio del video, no se puede ir mas atras"
+      current_frame = 0.0
+    elif current_frame >= NFRAMES - 1: 
+      print "Final del video, no se puede ir mas adelante"
+      current_frame = NFRAMES - 2
+
+  cv.PutText( output, text, (5, 15), TEXT_FONT, cv.CV_RGB(255, 255, 255) )
+  cv.ShowImage("Deteccion de Movimiento", output) #mostrar los resultados en el feed de video 
+
 print "Fin"
+
+
+
+
+
+

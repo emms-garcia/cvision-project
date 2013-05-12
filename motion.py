@@ -1,6 +1,5 @@
-import cv2
 import cv
-
+import math
 ########################################################################################
 #Variables importantes utilizadas
 ########################################################################################
@@ -83,45 +82,51 @@ def get_motion_mask(camera_image):
 #Loop infinito para ejecutar las rutinas de deteccion de movimiento hasta
 #que se presione la tecla esc
 ########################################################################################
+pi = 3.14159265358979323846
 while True:
-  camera_image = cv.QueryFrame( c ) #imagen obtenida de la camara
-  prev = get_motion_mask(camera_image) #imagen tratada con los filtros para obtener zonas en movimiento
-  #obtencion de contornos de las manchas
-  contour = cv.FindContours( prev, mem_storage, cv.CV_RETR_CCOMP, cv.CV_CHAIN_APPROX_SIMPLE )
-  bbox_list = [] #lista para almacenar los bounding box de las manchas
-  average_box_area = 0 #variable para obtener el area en promedio de las bounding box
-  while contour: #recorrido de los contornos/manchas
-    bbox = cv.BoundingRect(list(contour)) #obtencion del bounding box del contorno actual
-    pt1 = (bbox[0], bbox[1]) #punto 1 del bounding box
-    pt2 = (bbox[0] + bbox[2], bbox[1] + bbox[3]) #punto 2 del bounding box
-    w, h = abs(pt1[0] - pt2[0]), abs(pt1[1] - pt2[1]) #ancho y largo del bounding box
-    #obtencion de puntos del contorno para crear un wire-frame
-    polygon_points = cv.ApproxPoly( list(contour), mem_storage, cv.CV_POLY_APPROX_DP )
-    #mostrar o las manchas de movimiento
-    if SHOW_MOVEMENT_AREA: cv.FillPoly( camera_image, [ list(polygon_points), ], cv.CV_RGB(255,255,255), 0, 0 )
-    #mostrar o no los contornos de las manchas de movimiento
-    if SHOW_MOVEMENT_CONTOUR and w*h > AREA*MIN_PERCENT: cv.PolyLine( camera_image, [ polygon_points, ], 0, cv.CV_RGB(255,255,255), 1, 0, 0 )
-    average_box_area += w*h #acumulacion de totales de areas
-    bbox_list.append((pt1, pt2)) #lista con todos los bounding box
-    contour = contour.h_next() #lectura del siguiente contorno, si hay
-  if len(bbox_list) > 0: #si hubo movimiento 
-    average_box_area = average_box_area/float(len(bbox_list)) #area promedio de bounding box
-    new_bbox_list = [] #nueva lista de bounding box, eliminando los menores al area promedio
-    for i in range(len(bbox_list)): #recorrido de los bounding box
-      pt1, pt2 = bbox_list[i] #separacion en dos puntos del bounding box
-      w, h = abs(pt1[0] - pt2[0]), abs(pt1[1] - pt2[1]) #obtencion del ancho y largo
-      if w*h >= average_box_area and w*h > AREA*MIN_PERCENT: #comparacion del area del bounding box con el promedio
-        new_bbox_list.append((pt1, pt2)) #si es mayor o igual, se queda en la nueva lista
-  bbox_list = get_collided_bboxes(new_bbox_list) #combinacion de varios bounding box en uno si estan en contacto
-  for pt1, pt2 in bbox_list: #recorrido de los bounding box finales
-    cv.Rectangle(camera_image, pt1, pt2, cv.CV_RGB(255,0,0), 1) #se dibuja un rectangulo en ese bounding box
-#  if len(points):
-#    center_point = reduce(lambda a, b: ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2), points)
-#    cv.Circle(camera_image, center_point, 40, cv.CV_RGB(255, 255, 255), 1)
-#    cv.Circle(camera_image, center_point, 30, cv.CV_RGB(255, 100, 0), 1)
-#    cv.Circle(camera_image, center_point, 20, cv.CV_RGB(255, 255, 255), 1)
-#    cv.Circle(camera_image, center_point, 10, cv.CV_RGB(255, 100, 0), 1)
-  cv.ShowImage('e2', camera_image) #mostrar los resultados en el feed de video
+  frame = cv.QueryFrame( c ) #imagen obtenida de la camara
+  frame1 = cv.CloneImage( frame )
+  #frame = get_motion_mask(frame) #imagen tratada con los filtros para obtener zonas en movimiento
+  eig_image = cv.CreateImage(cv.GetSize(frame), cv.IPL_DEPTH_32F, 1)
+  temp_image = cv.CreateImage(cv.GetSize(frame), cv.IPL_DEPTH_32F, 1)
+  frame1_1C = cv.CreateImage( cv.GetSize(frame), cv.IPL_DEPTH_8U, 1 ) 
+  frame2_1C = cv.CreateImage( cv.GetSize(frame), cv.IPL_DEPTH_8U, 1 ) 
+  frame2_1C = cv.CreateImage( cv.GetSize(frame), cv.IPL_DEPTH_8U, 1 ) 
+  pyramid1 = cv.CreateImage( cv.GetSize(frame), cv.IPL_DEPTH_8U, 1 ) 
+  pyramid2 = cv.CreateImage( cv.GetSize(frame), cv.IPL_DEPTH_8U, 1 ) 
+  #cv.ConvertImage(frame, frame1_1C, cv.CVTIMPG_FLIP)
+  cv.ConvertImage(frame, frame1_1C, cv.CV_CVTIMG_FLIP)
+  #cv.ConvertImage(frame, frame1, cv.CV_CVTIMG_FLIP)
+
+  frame = cv.QueryFrame( c ) #imagen obtenida de la camara
+  cv.ConvertImage(frame, frame2_1C, cv.CV_CVTIMG_FLIP)
+
+  qualityLevel = 0.1
+  minDistance = 5
+  number_of_features = 400
+  frame1_features = cv.GoodFeaturesToTrack(frame1_1C, eig_image, temp_image, number_of_features, qualityLevel, minDistance, None, 3, False)
+
+  frame2_features, status, track_error = cv.CalcOpticalFlowPyrLK(frame1_1C, frame2_1C, pyramid1, pyramid2, frame1_features, 
+                            (3, 3), 5,  (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, 20, 0.03), 0)
+  for i in range(number_of_features):
+    try:
+      p = frame1_features[i]
+      q = frame2_features[i]
+      p = int(p[0]), int(p[1])
+      angle = math.atan2(p[1] - q [1], p[0] - q[0])
+      hypotenuse = math.sqrt(math.pow(p[1] - q[1], 2) + math.pow(p[0] - q[0], 2))
+      q = (int(p[0] - 3*hypotenuse * math.cos(angle)), int(p[1] - 3*hypotenuse * math.sin(angle)))
+
+      cv.Line( frame1, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
+
+      p = (int(q[0] + 9 * math.cos(angle + pi / 4)), int(q[1] + 9 * math.sin(angle + pi/4)))
+      cv.Line( frame1, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
+      p = (int(q[0] + 9 * math.cos(angle - pi / 4)), int(q[1] + 9 * math.sin(angle - pi/4)))
+      cv.Line( frame1, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
+    except IndexError:
+      break
+  
+  cv.ShowImage('e2',frame1) #mostrar los resultados en el feed de video
 
   if cv.WaitKey(5) == 27: #si se presiona la tecla esc
     break #salir del while infinito para terminar

@@ -2,6 +2,18 @@ import cv
 import math
 import sys
 
+try:
+  if "-h" in sys.argv[1] or "--help" in sys.argv[1]:
+    print "Ejecucion:"
+    print "\t \t python %s input_video output_video"%sys.argv[0]
+    print
+    print "Parametros:"
+    print "-input_video(opcional): Video de entrada a procesar (camara web si no se especifica)"
+    print "-output_video(opcional): Video de salida para almacenar los resultados"
+    sys.exit()
+except IndexError:
+  print 'Algo ocurrio.'
+
 ########################################################################################
 #Simple funcion usada para calcular la distancia entre dos puntos.
 ########################################################################################
@@ -34,16 +46,41 @@ NFRAMES = None #Numero de frames a usar, si se utiliza un archivo
 VIDEOFILE = False
 PLAY = False
 TEXT_FONT = cv.InitFont(cv.CV_FONT_HERSHEY_COMPLEX, .5, .5, 0.0, 1, cv.CV_AA )
+VIDEO_WRITER = None
 ########################################################################################
 #Inicializacion de lectura de frames. Si se especifico un archivo de video como argumento
 #desde la linea de comandos, se utiliza dicho video, si no se utiliza la webcam.
 ########################################################################################
 c = cv.CreateCameraCapture(0) #Usar camara 0 (camara web)
-if ".avi" in sys.argv[1]:
-  VIDEOFILE = True
-  c = cv.CaptureFromFile( sys.argv[1] ) #Usar camara 0 (camara web)
-  NFRAMES = cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_COUNT  )
+try:
+  if "-h" in sys.argv[1] or "--help" in sys.argv[1]:
+    print "Ejecucion:"
+    print "\t \t python %s input_video output_video"%sys.argv[0]
+    print
+    print "Parametros:"
+    print "-input_video(opcional): Video de entrada a procesar (camara web si no se especifica)"
+    print "-output_video(opcional): Video de salida para almacenar los resultados"
+    sys.exit()
+except:
+  pass
 
+try:
+  if ".avi" in sys.argv[1]:
+    VIDEOFILE = True
+    c = cv.CaptureFromFile( sys.argv[1] ) #Usar camara 0 (camara web)
+    NFRAMES = cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_COUNT  )
+    FRAMES_VIDEO = [None for i in range(int(NFRAMES))]
+except:
+  print "No se especifico video de entrada, usando camara web."
+  print "Usa %s -h   o %s --help para conocer los parametros."%(sys.argv[0], sys.argv[0])
+  
+try:
+  if ".avi" in sys.argv[2]:
+    VIDEO_WRITER = cv.CreateVideoWriter(sys.argv[2], cv.CV_FOURCC('P','I','M','1') , 30, (WIDTH, HEIGHT), True)
+    print "Grabando video en: %s"%sys.argv[2]
+except:
+  print "No se especifico video de salida."
+  print "Usa %s -h   o %s --help para conocer los parametros."%(sys.argv[0], sys.argv[0])
 ########################################################################################
 #Propiedades de la captura de imagenes desde la webcam.
 ########################################################################################
@@ -132,7 +169,7 @@ while True:
   key = cv.WaitKey(7) % 0x100
   if key == 27 or key == 10:
     break
-  if VIDEOFILE:
+  if VIDEOFILE and VIDEO_WRITER is None:
     if chr(key) == 'n' or chr(key) == 'N':
       current_frame += 1.0
     elif chr(key) == 'b' or chr(key) == 'B':
@@ -156,11 +193,15 @@ while True:
     elif current_frame >= NFRAMES - 1: 
       print "Final del video, no se puede ir mas adelante"
       current_frame = NFRAMES - 2
+  else:
+    if VIDEO_WRITER: cv.WriteFrame(VIDEO_WRITER, output)
+    current_frame += 1
 
   cv.PutText( output, text, (5, 15), TEXT_FONT, cv.CV_RGB(255, 255, 255) )
-  cv.ShowImage("Deteccion de Movimiento", output) #mostrar los resultados en el feed de video 
+  cv.ShowImage("Deteccion de Movimiento", output) #mostrar los resultados en el feed de video   
 
 print "Fin"
+
 
 
 

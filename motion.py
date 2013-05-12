@@ -15,6 +15,32 @@ except IndexError:
   print 'Algo ocurrio.'
 
 ########################################################################################
+#Funcion que a partir de una lista de bounding box busca aquellos que se sobreponen
+#y los combina creando uno solo. Retorna la nueva lista conteniendo bounding box
+#no sobrepuestos.
+########################################################################################
+def get_collided_bboxes(bbox_list):
+  for this_bbox in bbox_list:
+    for other_bbox in bbox_list:
+      if this_bbox is other_bbox: continue
+      (x1, y1), (w1, h1) = this_bbox
+      (x2, y2), (w2, h2) = other_bbox
+      has_collision = False
+      if (x1 < w2 and w1 > x2 and y1 < h2 and h1 > y2):
+        has_collision = True
+      if has_collision:
+        x = min(x1, x2)
+        y = min(y1, y2)
+        w = max(w1, w2)
+        h = max(h1, h2)
+        new_bbox = ((x, y), (w, h))
+        bbox_list.remove(this_bbox)
+        bbox_list.remove(other_bbox)
+        bbox_list.append(new_bbox)
+        return get_collided_bboxes(bbox_list)
+  return bbox_list
+
+########################################################################################
 #Simple funcion usada para calcular la distancia entre dos puntos.
 ########################################################################################
 def distance(p1, p2):
@@ -34,11 +60,20 @@ def calculate_resize(actual_size, input_size):
 ########################################################################################
 #Propiedades de la captura de imagenes desde la camara.
 ########################################################################################
-WIDTH = 620 #Ancho de video a usar
-HEIGHT = 440 #Alto de video a usar
+WIDTH = 440 #Ancho de video a usar
+HEIGHT = 200 #Alto de video a usar
 #FPS = 30
 #BRIGHTNESS = 200
 #CONTRAST = 200
+AREA = WIDTH*HEIGHT #Numero de pixeles/Area total de los frames
+MIN_PERCENT = 0.05 #Porcentaje minimo de pixeles que debe tener un objeto en movimiento
+GAUSSIAN_BLUR_FACTOR_1 = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
+GAUSSIAN_BLUR_FACTOR_2 = 19 #Tamano de la matriz usada para eliminar ruido la segunda vez
+BINARY_THRESHOLD_1 = 2 #Umbral de binarizacion inicial
+BINARY_THRESHOLD_2 = 240 #Umbral de binarizacion final
+DILATION_FACTOR = 3 #Tamano de la matriz usada para dilatar las manchas de movimiento
+SHOW_MOVEMENT_CONTOUR = True #Ver o no contornos de las manchas de movimiento
+SHOW_MOVEMENT_AREA = False #Ver o no las manchas de movimiento
 DIAGONAL = distance((0, 0), (WIDTH, HEIGHT)) #Distancia Maxima del video
 GAUSSIAN_BLUR_FACTOR = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
 NFEATURES = 100 #Numero maximo de caracterististicas a buscar
@@ -70,6 +105,8 @@ try:
     c = cv.CaptureFromFile( sys.argv[1] ) #Usar camara 0 (camara web)
     NFRAMES = cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_COUNT  )
     FRAMES_VIDEO = [None for i in range(int(NFRAMES))]
+    WIDTH = int(cv.GetCaptureProperty(c, cv.CV_CAP_PROP_FRAME_WIDTH))
+    HEIGHT = int(cv.GetCaptureProperty(c, cv.CV_CAP_PROP_FRAME_HEIGHT))
 except:
   print "No se especifico video de entrada, usando camara web."
   print "Usa %s -h   o %s --help para conocer los parametros."%(sys.argv[0], sys.argv[0])
@@ -86,10 +123,9 @@ except:
 ########################################################################################
 cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_WIDTH, WIDTH ) #Ajustar ancho de video
 cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_HEIGHT, HEIGHT ) #Ajustar altura de video
-
 #cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FPS, FPS )
 #cv.SetCaptureProperty( c, cv.CV_CAP_PROP_BRIGHTNESS, BRIGHTNESS ) 
-#cv.SetCaptureProperty( c, cv.CV_CAP_PROP_CONTRAST, CONTRAST ) #
+#cv.SetCaptureProperty( c, cv.CV_CAP_PROP_CONTRAST, CONTRAST ) 
 
 ########################################################################################
 #Inicializacion de variables para diferentes imagenes usadas en los calculos
@@ -109,7 +145,35 @@ frame1_1C = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 )
 frame2_1C = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 ) 
 #contenedor de parametros usados en el algoritmo Lucas Kanade
 pyramid1 = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 ) 
-pyramid2 = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 ) 
+pyramid2 = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 )
+#copia usada para binarizacion y grescale
+grey_image = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_8U, 1 )
+#copia usada para promediado de frames
+running_average_image = cv.CreateImage( cv.GetSize(thumbnail), cv.IPL_DEPTH_32F, 3 )
+#copia usada para conversion de escala
+running_average_in_display_color_depth = cv.CloneImage( thumbnail )
+mem_storage = cv.CreateMemStorage(0) #buffer de memoria usado por algunas funciones
+difference = cv.CloneImage( thumbnail ) #copia usada para almacenar la diferencia entre frames
+ 
+########################################################################################
+#Funcion que realiza todos los procesamientos a los frames de la camara para obtener
+#al final una imagen binarizada, donde los pixeles blancos son en los que hubo 
+#movimiento y los negros en los que no.
+########################################################################################
+def get_motion_mask(first_frame, second_frame):
+  cv.Smooth( first_frame, first_frame, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR_1, 0 ) #smooth/blur inicial para eliminar ruido
+  cv.Smooth( second_frame, first_frame, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR_1, 0 ) #smooth/blur inicial para eliminar ruido
+  #cv.RunningAvg( color_image, running_average_image, 0.320, None )#obtencion de un promedio de frames
+  #cv.ConvertScale( running_average_image, running_average_in_display_color_depth, 1.0, 0.0 ) #conversion de escala
+  cv.AbsDiff( first_frame, second_frame, difference ) #diferencia entre la imagen promedio y la original
+  cv.CvtColor( difference, grey_image, cv.CV_RGB2GRAY )#conversion de la imagen a escala de grises
+  cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_1, 255, cv.CV_THRESH_BINARY )#binarizacion de la imagen
+  cv.Dilate(grey_image, grey_image, None, 1)
+  cv.Erode(grey_image, grey_image, None, 1  )
+  cv.Smooth( grey_image, grey_image, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR_2, 0 ) #otro smooth aplicado para eliminar pequenas manchas
+  cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_2, 255, cv.CV_THRESH_BINARY ) #rebinarizacion para eliminar pequenas manchas
+  return grey_image
+
 cv.SetCaptureProperty(c, cv.CV_CAP_PROP_POS_FRAMES, 0.0 )
 current_frame = 0
 ########################################################################################
@@ -121,6 +185,7 @@ while True:
   frame = cv.QueryFrame( c ) #primer frame obtenido para el calculo del flujo optico
   if frame == None: break #si no se obtuvo ningun frame, se termino el archivo de video
   cv.Resize(frame, thumbnail) #si se obtuvo un frame, se cambia el tamano al deseado
+  first_frame = cv.CloneImage(thumbnail)
   output = cv.CloneImage( thumbnail ) #se crea una copia del frame para dibujar sobre el
   #se pasa un filtro gaussiano para reducir ruido
   cv.Smooth( thumbnail, thumbnail, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR, GAUSSIAN_BLUR_FACTOR )
@@ -130,8 +195,38 @@ while True:
   frame = cv.QueryFrame( c ) #segundo frame obtenido para el calculo del flujo optico
   if frame == None: break 
   cv.Resize(frame, thumbnail) 
+  second_frame = cv.CloneImage(thumbnail)
+  motion = get_motion_mask(first_frame, second_frame)
   cv.Smooth( thumbnail, thumbnail, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR, GAUSSIAN_BLUR_FACTOR )
   cv.ConvertImage(thumbnail, frame2_1C, cv.CV_CVTIMG_FLIP)
+  contour = cv.FindContours( motion, mem_storage, cv.CV_RETR_CCOMP, cv.CV_CHAIN_APPROX_SIMPLE )  
+  bbox_list = [] #lista para almacenar los bounding box de las manchas
+  average_box_area = 0 #variable para obtener el area en promedio de las bounding box
+  while contour: #recorrido de los contornos/manchas
+    bbox = cv.BoundingRect(list(contour)) #obtencion del bounding box del contorno actual
+    pt1 = (bbox[0], bbox[1]) #punto 1 del bounding box
+    pt2 = (bbox[0] + bbox[2], bbox[1] + bbox[3]) #punto 2 del bounding box
+    w, h = abs(pt1[0] - pt2[0]), abs(pt1[1] - pt2[1]) #ancho y largo del bounding box
+    #obtencion de puntos del contorno para crear un wire-frame
+    polygon_points = cv.ApproxPoly( list(contour), mem_storage, cv.CV_POLY_APPROX_DP )
+    #mostrar o las manchas de movimiento
+    if SHOW_MOVEMENT_AREA: cv.FillPoly( output, [ list(polygon_points), ], cv.CV_RGB(255,255,255), 0, 0 )
+    #mostrar o no los contornos de las manchas de movimiento
+    if SHOW_MOVEMENT_CONTOUR and w*h > AREA*MIN_PERCENT: cv.PolyLine( output, [ polygon_points, ], 0, cv.CV_RGB(255,255,255), 1, 0, 0 )
+    average_box_area += w*h #acumulacion de totales de areas
+    bbox_list.append((pt1, pt2)) #lista con todos los bounding box
+    contour = contour.h_next() #lectura del siguiente contorno, si hay
+  if len(bbox_list) > 0: #si hubo movimiento 
+    average_box_area = average_box_area/float(len(bbox_list)) #area promedio de bounding box
+    new_bbox_list = [] #nueva lista de bounding box, eliminando los menores al area promedio
+    for i in range(len(bbox_list)): #recorrido de los bounding box
+      pt1, pt2 = bbox_list[i] #separacion en dos puntos del bounding box
+      w, h = abs(pt1[0] - pt2[0]), abs(pt1[1] - pt2[1]) #obtencion del ancho y largo
+      if w*h >= average_box_area and w*h > AREA*MIN_PERCENT: #comparacion del area del bounding box con el promedio
+        new_bbox_list.append((pt1, pt2)) #si es mayor o igual, se queda en la nueva lista
+  bbox_list = get_collided_bboxes(new_bbox_list) #combinacion de varios bounding box en uno si estan en contacto
+  for pt1, pt2 in bbox_list: #recorrido de los bounding box finales
+    cv.Rectangle(output, pt1, pt2, cv.CV_RGB(255,0,0), 1) #se dibuja un rectangulo en ese bounding box
 
   #obtencion de caracteristicas del primer frame
   frame1_features = cv.GoodFeaturesToTrack(frame1_1C, eig_image, temp_image, NFEATURES, 0.1, 5, None, 3, False)
@@ -201,10 +296,4 @@ while True:
   cv.ShowImage("Deteccion de Movimiento", output) #mostrar los resultados en el feed de video   
 
 print "Fin"
-
-
-
-
-
-
 

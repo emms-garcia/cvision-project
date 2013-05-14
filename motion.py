@@ -216,7 +216,7 @@ def get_motion_mask(first_frame, second_frame):
   cv.CvtColor( difference, grey_image, cv.CV_RGB2GRAY )#conversion de la imagen a escala de grises
   cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_1, 255, cv.CV_THRESH_BINARY )#binarizacion de la imagen
   #dilatacion y afinamiento de las manchas para crear blobs mas definidos
-  cv.Dilate(grey_image, grey_image, None, 2)
+  cv.Dilate(grey_image, grey_image, None, 3)
   cv.Erode(grey_image, grey_image, None, 3)
   cv.Smooth( grey_image, grey_image, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR_2, 0 ) #otro smooth aplicado para eliminar pequenas manchas
   cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_2, 255, cv.CV_THRESH_BINARY ) #rebinarizacion para eliminar pequenas manchas
@@ -255,6 +255,7 @@ while True:
   frame1_features = cv.GoodFeaturesToTrack(frame1_1C, eig_image, temp_image, NFEATURES, 0.1, 5, None, 3, False)
 
   #busqueda de caracteristicas del primer frame, en el segundo usando el algoritmo de Lucas Kanade
+
   frame2_features, status, track_error = cv.CalcOpticalFlowPyrLK(frame1_1C, frame2_1C, pyramid1, pyramid2, frame1_features, 
                             (3, 3), 5,  (cv.CV_TERMCRIT_ITER|cv.CV_TERMCRIT_EPS, 20, 0.03), 0)
 
@@ -263,6 +264,8 @@ while True:
   totals = []
   for pt1, pt2 in bbox_list: #recorrido de los bounding box finales
     cv.Rectangle(output, pt1, pt2, cv.CV_RGB(255,0,0), 1) #se dibuja un rectangulo en ese bounding box
+    center = ( min(pt1[0], pt2[0]) + abs(pt1[0] - pt2[0])/2, min(pt1[1], pt2[1]) + abs(pt1[1] - pt2[1])/2 )
+    angles = []
     for i in range(len(frame2_features)):
       p = frame1_features[i]
       q = frame2_features[i]
@@ -274,7 +277,6 @@ while True:
       p = (p[0], HEIGHT - p[1])
       q = (q[0], HEIGHT - q[1])
       if is_inside_bb(p, (pt1, pt2)) or is_inside_bb(p, (pt1, pt2)):
-        
         #eliminacion de ruido (movimientos bruscos de un lado de la imagen al otro)
         if distance(p, q) > DIAGONAL * 0.2:
           continue
@@ -282,13 +284,22 @@ while True:
         elif distance(p, q) < 10:
           continue
         #por un error, openCV toma los .avi al reves verticalmente, por lo que se voltean las coordenadas y
-
+        angles.append(angle)
         #dibujo de las flechas de flujo optico
-        cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
-        p = (int(q[0] + 9 * math.cos(angle + math.pi / 4)), int(q[1] + 9 * math.sin(angle + math.pi/4)))
-        cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
-        p = (int(q[0] + 9 * math.cos(angle - math.pi / 4)), int(q[1] + 9 * math.sin(angle - math.pi/4)))
-        cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )
+    if len(angles) > 0:
+      p, q = center, center
+      angle = sum(angles)/float(len(angles))
+      if int(math.degrees(angle)) in range(90, 270):
+        print "Derecha"
+        angle = math.radians(180)
+      else:
+        print "Izquierda"
+        angle = math.radians(0)
+      cv.Line( output, p, q, cv.CV_RGB(0, 0, 255), 3, cv.CV_AA, 0 )
+      p = (int(q[0] + 15 * math.cos(angle + math.pi / 4)), int(q[1] + 15 * math.sin(angle + math.pi/4)))
+      cv.Line( output, p, q, cv.CV_RGB(0, 0, 255), 3, cv.CV_AA, 0 )
+      p = (int(q[0] + 15 * math.cos(angle - math.pi / 4)), int(q[1] + 15 * math.sin(angle - math.pi/4)))
+      cv.Line( output, p, q, cv.CV_RGB(0, 0, 255), 3, cv.CV_AA, 0 )
 
   #print "%s, %s"%(muestra, FIN - INICIO)
   text = ""

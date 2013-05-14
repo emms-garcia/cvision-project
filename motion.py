@@ -28,7 +28,8 @@ def is_inside_bb(p, bb):
   x, y = p
   if x > min(x1, x2) and x < max(x1, x2) and y > min(y1, y2) and y < max(y1, y2):
     return True
-  return False
+  else:
+    return False
 
 ########################################################################################
 #Funcion que a partir de una lista de bounding box busca aquellos que se sobreponen
@@ -82,14 +83,14 @@ AREA = WIDTH*HEIGHT #Numero de pixeles/Area total de los frames
 MIN_PERCENT = 0.05 #Porcentaje minimo de pixeles que debe tener un objeto en movimiento
 GAUSSIAN_BLUR_FACTOR_1 = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
 GAUSSIAN_BLUR_FACTOR_2 = 19 #Tamano de la matriz usada para eliminar ruido la segunda vez
-BINARY_THRESHOLD_1 = 2 #Umbral de binarizacion inicial
+BINARY_THRESHOLD_1 = 10 #Umbral de binarizacion inicial
 BINARY_THRESHOLD_2 = 240 #Umbral de binarizacion final
 DILATION_FACTOR = 3 #Tamano de la matriz usada para dilatar las manchas de movimiento
 SHOW_MOVEMENT_CONTOUR = True #Ver o no contornos de las manchas de movimiento
 SHOW_MOVEMENT_AREA = False #Ver o no las manchas de movimiento
 DIAGONAL = distance((0, 0), (WIDTH, HEIGHT)) #Distancia Maxima del video
 GAUSSIAN_BLUR_FACTOR = 3 #Tamano de la matriz usada para eliminar ruido la primera vez
-NFEATURES = 400 #Numero maximo de caracterististicas a buscar
+NFEATURES = 100 #Numero maximo de caracterististicas a buscar
 NOPTICAL_FLOW = 5
 NFRAMES = None #Numero de frames a usar, si se utiliza un archivo
 VIDEOFILE = False #Para saber si se esta leyendo desde un archivo
@@ -215,8 +216,8 @@ def get_motion_mask(first_frame, second_frame):
   cv.CvtColor( difference, grey_image, cv.CV_RGB2GRAY )#conversion de la imagen a escala de grises
   cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_1, 255, cv.CV_THRESH_BINARY )#binarizacion de la imagen
   #dilatacion y afinamiento de las manchas para crear blobs mas definidos
-  cv.Dilate(grey_image, grey_image, None, 1)
-  cv.Erode(grey_image, grey_image, None, 1)
+  cv.Dilate(grey_image, grey_image, None, 2)
+  cv.Erode(grey_image, grey_image, None, 3)
   cv.Smooth( grey_image, grey_image, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR_2, 0 ) #otro smooth aplicado para eliminar pequenas manchas
   cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_2, 255, cv.CV_THRESH_BINARY ) #rebinarizacion para eliminar pequenas manchas
   return grey_image
@@ -267,10 +268,13 @@ while True:
       q = frame2_features[i]
       p = int(p[0]), int(p[1])
       q = int(q[0]), int(q[1])
-      if True:#is_inside_bb(p, (pt1, pt2)) or is_inside_bb(p, (pt1, pt2)):
-        angle = math.atan2(p[1] - q[1], p[0] - q[0]) #calculamos el angulo entre ellos
-        hypotenuse = math.sqrt(math.pow(p[1] - q[1], 2) + math.pow(p[0] - q[0], 2))
-        q = (int(p[0] - 3*hypotenuse * math.cos(angle)), int(p[1] - 3*hypotenuse * math.sin(angle)))
+      angle = math.atan2(p[1] - q[1], p[0] - q[0]) #calculamos el angulo entre ellos
+      hypotenuse = math.sqrt(math.pow(p[1] - q[1], 2) + math.pow(p[0] - q[0], 2))
+      q = (int(p[0] - 3*hypotenuse * math.cos(angle)), int(p[1] - 3*hypotenuse * math.sin(angle)))
+      p = (p[0], HEIGHT - p[1])
+      q = (q[0], HEIGHT - q[1])
+      if is_inside_bb(p, (pt1, pt2)) or is_inside_bb(p, (pt1, pt2)):
+        
         #eliminacion de ruido (movimientos bruscos de un lado de la imagen al otro)
         if distance(p, q) > DIAGONAL * 0.2:
           continue
@@ -278,8 +282,6 @@ while True:
         elif distance(p, q) < 10:
           continue
         #por un error, openCV toma los .avi al reves verticalmente, por lo que se voltean las coordenadas y
-        p = (p[0], HEIGHT - p[1])
-        q = (q[0], HEIGHT - q[1])
 
         #dibujo de las flechas de flujo optico
         cv.Line( output, p, q, cv.CV_RGB(255, 0, 0), 1, cv.CV_AA, 0 )

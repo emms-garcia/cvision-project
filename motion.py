@@ -109,11 +109,13 @@ try:
     c = cv.CaptureFromFile( sys.argv[1] ) #Usar camara 0 (camara web)
     #numero total de frames en el video
     NFRAMES = cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_COUNT  )
+    print cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FPS)
     #FRAMES_VIDEO = [None for i in range(int(NFRAMES))]
     #Ancho de resolucion usado en el video
     WIDTH = int(cv.GetCaptureProperty(c, cv.CV_CAP_PROP_FRAME_WIDTH))
     #Alto de resolucion usado en el video
     HEIGHT = int(cv.GetCaptureProperty(c, cv.CV_CAP_PROP_FRAME_HEIGHT))
+    print WIDTH, HEIGHT
 except:
   print "No se especifico video de entrada, usando camara web."
   print "Usa %s -h   o %s --help para conocer los parametros."%(sys.argv[0], sys.argv[0])
@@ -216,14 +218,20 @@ def get_motion_mask(first_frame, second_frame):
   cv.CvtColor( difference, grey_image, cv.CV_RGB2GRAY )#conversion de la imagen a escala de grises
   cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_1, 255, cv.CV_THRESH_BINARY )#binarizacion de la imagen
   #dilatacion y afinamiento de las manchas para crear blobs mas definidos
-  cv.Dilate(grey_image, grey_image, None, 3)
-  cv.Erode(grey_image, grey_image, None, 3)
+  cv.Dilate(grey_image, grey_image, None, 4)
+  cv.Erode(grey_image, grey_image, None, 4)
   cv.Smooth( grey_image, grey_image, cv.CV_GAUSSIAN, GAUSSIAN_BLUR_FACTOR_2, 0 ) #otro smooth aplicado para eliminar pequenas manchas
   cv.Threshold( grey_image, grey_image, BINARY_THRESHOLD_2, 255, cv.CV_THRESH_BINARY ) #rebinarizacion para eliminar pequenas manchas
   return grey_image
 
 cv.SetCaptureProperty(c, cv.CV_CAP_PROP_POS_FRAMES, 0.0 ) #reiniciar la lectura de video al primer frame
+cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FPS, 7.5)
+print cv.GetCaptureProperty( c, cv.CV_CAP_PROP_FPS)
+#cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_HEIGHT, HEIGHT)
+#cv.SetCaptureProperty( c, cv.CV_CAP_PROP_FRAME_WIDTH, WIDTH)
 current_frame = 0
+cv.NamedWindow("Deteccion de Movimiento", cv.CV_WINDOW_AUTOSIZE) 
+cv.MoveWindow("Deteccion de Movimiento", (1366/2) - WIDTH/2, (768/2) - HEIGHT/2)
 ########################################################################################
 #Loop infinito para ejecutar las rutinas de deteccion de movimiento hasta
 #que se presione la tecla esc
@@ -290,10 +298,10 @@ while True:
       p, q = center, center
       angle = sum(angles)/float(len(angles))
       if int(math.degrees(angle)) in range(90, 270):
-        print "Derecha"
+        print "Derecha, ",math.degrees(angle)
         angle = math.radians(180)
       else:
-        print "Izquierda"
+        print "Izquierda, ", math.degrees(angle)
         angle = math.radians(0)
       cv.Line( output, p, q, cv.CV_RGB(0, 0, 255), 3, cv.CV_AA, 0 )
       p = (int(q[0] + 15 * math.cos(angle + math.pi / 4)), int(q[1] + 15 * math.sin(angle + math.pi/4)))
